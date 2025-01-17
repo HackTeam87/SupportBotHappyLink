@@ -165,7 +165,7 @@ def get_pay_menu() -> types.InlineKeyboardMarkup:
     return menu
 
 # =====================================
-#  Логика &laquo;состояний&raquo; для поддержки
+#  Логика состояний; для поддержки
 # =====================================
 user_state = {}
 
@@ -217,8 +217,6 @@ def contact_handler(message: types.Message):
     except Exception as e:
         logging.error(f"Ошибка: {e}")
         bot.send_message(user_id, "Сталася помилка. Спробуйте пізніше.")
-
-
 
 
 
@@ -291,8 +289,6 @@ def bill_handler(message: types.Message):
         connection.close()
 
 
-
-
 @bot.message_handler(func=lambda msg: msg.text == "💯 Платежі") 
 def show_payment_handler(message: types.Message):
     user_id = message.chat.id
@@ -347,9 +343,6 @@ def show_payment_handler(message: types.Message):
 
 
 
-
-
-
 @bot.message_handler(func=lambda msg: msg.text == "👤 Особистий кабінет")
 def lc_handler(message: types.Message):
     user_id = message.chat.id
@@ -401,7 +394,7 @@ def show_requisites_handler(call: types.CallbackQuery):
 
 
 # =====================================
-#   Блок &laquo;Связаться с поддержкой&raquo;
+#   Блок 📞 Підтримка;
 # =====================================
 @bot.message_handler(func=lambda msg: msg.text == "📞 Підтримка")
 def contact_support_handler(message: types.Message):
