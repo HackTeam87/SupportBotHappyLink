@@ -25,6 +25,10 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 URL = os.getenv('VITE_SERVICE_API_URL')
 KEY = os.getenv('VITE_SERVICE_API_KEY')
 
+# Время задержки отправки сообщения
+MESSAGE_DELAY_TIME = 1.1
+
+
 # Настройка логирования
 logging.basicConfig(
     filename='/tmp/SupportBot.log',
@@ -197,6 +201,7 @@ def contact_handler(message: types.Message):
     try:
         result = get_user_by_phone(phone_number, user_id)
         if result is True:
+            time.sleep(MESSAGE_DELAY_TIME)
             bot.send_message(
                 user_id,
                 (
@@ -271,6 +276,7 @@ def bill_handler(message: types.Message):
                 # Получаем "Договір" и добавляем его в сообщение перед таблицей
                 agreement = bill_records[0][0]
 
+                time.sleep(MESSAGE_DELAY_TIME)
                 bot.send_message(
                     user_id,
                     text=f"Договір# {agreement}\n<pre>{table_text}</pre>",
@@ -325,6 +331,8 @@ def show_payment_handler(message: types.Message):
                 # Получаем "Договір" и добавляем его в сообщение перед таблицей
                 agreement = payment_records[0][4]
                 table_text = tabulate(table, headers=headers, tablefmt="grid")
+
+                time.sleep(MESSAGE_DELAY_TIME)
                 bot.send_message(
                     user_id,
                     text=f"Договір# {agreement}\n останні 12 платежів \n<pre>{table_text}</pre>",
@@ -343,23 +351,25 @@ def show_payment_handler(message: types.Message):
 
 
 
-@bot.message_handler(func=lambda msg: msg.text == "👤 Особистий кабінет")
+@bot.message_handler(func=lambda msg: msg.text == "👤 Кабінет")
 def lc_handler(message: types.Message):
     user_id = message.chat.id
-    time.sleep(1)
+
+    time.sleep(MESSAGE_DELAY_TIME)
     bot.send_photo(
         user_id,
         'https://cdn.pixabay.com/photo/2024/06/03/12/29/online-8806305_960_720.jpg',
         reply_markup=get_lc_menu()
     )
-    logging.info(f"Користувач {user_id} натиснув 'Особистий кабінет'.")
+    logging.info(f"Користувач {user_id} натиснув '👤 Кабінет'.")
 
 
 
 @bot.message_handler(func=lambda msg: msg.text == "💰 Оплата")
 def pay_handler(message: types.Message):
     user_id = message.chat.id
-    time.sleep(1)
+
+    time.sleep(MESSAGE_DELAY_TIME)
     bot.send_photo(
         user_id,
         'https://cdn.pixabay.com/photo/2024/06/03/12/29/online-8806305_960_720.jpg',
@@ -381,7 +391,8 @@ def show_requisites_handler(call: types.CallbackQuery):
             "Призначення платежу": "Оплата за інтернет, особовий рахунок № [Ваш рахунок]"
         }
         table_text = "\n".join([f"{key}: {value}" for key, value in data.items()])
-        time.sleep(1)
+
+        time.sleep(MESSAGE_DELAY_TIME)
         bot.send_message(
             user_id,
             f"<b>Платіжна інформація:</b>\n\n{table_text}",
@@ -407,7 +418,8 @@ def contact_support_handler(message: types.Message):
     # Кнопка возврата
     back_button = types.KeyboardButton("↩️ Повернутись до головного меню")
     support_menu.add(back_button)
-
+    
+    time.sleep(MESSAGE_DELAY_TIME)
     msg = bot.send_message(
         user_id,
         "Введіть, будь ласка, текст повідомлення для підтримки "
@@ -423,6 +435,8 @@ def process_support_message(message: types.Message):
     # Если пользователь нажал кнопку &laquo;↩️ Повернутись до головного меню&raquo;
     if message.text == "↩️ Повернутись до головного меню":
         set_user_state(user_id, None)
+
+        time.sleep(MESSAGE_DELAY_TIME)
         bot.send_message(
             user_id,
             "Ви повернулися до головного меню.",
@@ -439,6 +453,8 @@ def process_support_message(message: types.Message):
         "📞 Підтримка"
     }
     if message.text in main_menu_texts and state == "support_waiting_text":
+
+        time.sleep(MESSAGE_DELAY_TIME)
         bot.send_message(
             user_id,
             "Ви натиснули кнопку меню, проте ми очікуємо текст повідомлення.\n"
@@ -451,6 +467,8 @@ def process_support_message(message: types.Message):
     user_data = get_user_by_telegram_id(user_id)
 
     if not user_data:
+
+        time.sleep(MESSAGE_DELAY_TIME)
         bot.send_message(user_id, "Не вдалося знайти ваш запис у базі.")
         set_user_state(user_id, None)
         return
@@ -476,13 +494,16 @@ def process_support_message(message: types.Message):
         logging.info(f"Сервис вернул: {response.text}")
     except Exception as e:
         logging.error(f"Ошибка при отправке заявки: {e}")
+
+        time.sleep(MESSAGE_DELAY_TIME)
         bot.send_message(
             user_id,
             "Виникла помилка при відправці заявки. Спробуйте пізніше."
         )
         set_user_state(user_id, None)
         return
-
+    
+    time.sleep(MESSAGE_DELAY_TIME)
     bot.send_message(
         user_id,
         "<b>Повідомлення отримано!</b>\nОчікуйте, ми зв’яжемося з вами.",
