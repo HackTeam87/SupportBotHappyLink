@@ -10,9 +10,7 @@ from dotenv import load_dotenv
 from telebot import TeleBot, types
 from tabulate import tabulate
 
-# библиотеки для работы с изображениями
-from PIL import Image
-from io import BytesIO
+
 
 # Запуск бота
 # sudo systemctl stop happylink_bot.service
@@ -128,12 +126,16 @@ def get_user_by_telegram_id(telegram_id: int):
 def unsupported_message_handler(message: types.Message):
     user_id = message.chat.id
 
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    button_start = types.KeyboardButton("/start")
+    markup.add(button_start)
+
     # Отправляем сообщение пользователю
     bot.send_message(
         user_id,
         "На жаль, я не підтримую цей тип повідомлень. "
         "Будь ласка, скористайтеся текстовими повідомленнями.",
-        reply_markup=get_main_menu()
+        reply_markup=markup
     )
 
     # Логируем неподдерживаемое сообщение
@@ -145,28 +147,6 @@ def unsupported_message_handler(message: types.Message):
 # =====================================
 def sanitize_input(input_text: str) -> str:
     return re.sub(r"[<>'\";]", "", input_text)
-
-def resize_image(image_url, width, height):
-    """
-    Функция для изменения размера изображения.
-    :param image_url: URL изображения
-    :param width: Ширина нового изображения
-    :param height: Высота нового изображения
-    :return: Измененное изображение в формате BytesIO
-    """
-    response = requests.get(image_url)  # Загружаем изображение по URL
-    img = Image.open(BytesIO(response.content))  # Открываем изображение
-    img_resized = img.resize((width, height))  # Изменяем размер
-    img_byte_arr = BytesIO()  # Создаем буфер для сохранения изображения
-    img_resized.save(img_byte_arr, format='JPEG')  # Сохраняем изображение в формате JPEG
-    img_byte_arr.seek(0)  # Возвращаемся к началу буфера
-    return img_byte_arr
-
-# URL исходного изображения
-#image_url = 'https://cdn.pixabay.com/photo/2024/06/03/12/29/online-8806305_960_720.jpg'
-
-# Уменьшаем изображение до ширины 300px и высоты 200px
-#resized_image = resize_image(image_url, 200, 75)
 
 
 # =====================================
