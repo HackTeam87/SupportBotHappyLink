@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 from telebot import TeleBot, types
 from tabulate import tabulate
 
+# библиотеки для работы с изображениями
+from PIL import Image
+from io import BytesIO
+
 # Запуск бота
 # sudo systemctl stop happylink_bot.service
 
@@ -115,11 +119,59 @@ def get_user_by_telegram_id(telegram_id: int):
     finally:
         connection.close()
 
+
+# =====================================
+#  Игнорирование нетекстовых сообщений
+# =====================================
+# Обработчик неподдерживаемых типов сообщений
+@bot.message_handler(content_types=['animation', 'audio', 'document', 'photo', 'sticker', 'video', 'video_note', 'voice', 'location', 'dice', 'poll'])
+def unsupported_message_handler(message: types.Message):
+    user_id = message.chat.id
+
+    # Отправляем сообщение пользователю
+    bot.send_message(
+        user_id,
+        "На жаль, я не підтримую цей тип повідомлень. "
+        "Будь ласка, скористайтеся текстовими повідомленнями.",
+        reply_markup=get_main_menu()
+    )
+
+    # Логируем неподдерживаемое сообщение
+    logging.info(f"Користувач {user_id} надіслав неподтримуване повідомлення типу {message.content_type}.")
+        
+
 # =====================================
 #        Вспомогательные функции
 # =====================================
 def sanitize_input(input_text: str) -> str:
     return re.sub(r"[<>'\";]", "", input_text)
+
+def resize_image(image_url, width, height):
+    """
+    Функция для изменения размера изображения.
+    :param image_url: URL изображения
+    :param width: Ширина нового изображения
+    :param height: Высота нового изображения
+    :return: Измененное изображение в формате BytesIO
+    """
+    response = requests.get(image_url)  # Загружаем изображение по URL
+    img = Image.open(BytesIO(response.content))  # Открываем изображение
+    img_resized = img.resize((width, height))  # Изменяем размер
+    img_byte_arr = BytesIO()  # Создаем буфер для сохранения изображения
+    img_resized.save(img_byte_arr, format='JPEG')  # Сохраняем изображение в формате JPEG
+    img_byte_arr.seek(0)  # Возвращаемся к началу буфера
+    return img_byte_arr
+
+# URL исходного изображения
+#image_url = 'https://cdn.pixabay.com/photo/2024/06/03/12/29/online-8806305_960_720.jpg'
+
+# Уменьшаем изображение до ширины 300px и высоты 200px
+#resized_image = resize_image(image_url, 200, 75)
+
+
+# =====================================
+#        Менюшки
+# =====================================
 
 def get_phone_keyboard() -> types.ReplyKeyboardMarkup:
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
@@ -135,16 +187,6 @@ def get_main_menu() -> types.ReplyKeyboardMarkup:
         types.KeyboardButton("💰 Оплата"),
         types.KeyboardButton("👤 Кабінет"),
         types.KeyboardButton("📞 Підтримка")
-    )
-    return menu
-
-def get_lc_menu() -> types.InlineKeyboardMarkup:
-    menu = types.InlineKeyboardMarkup()
-    menu.add(
-        types.InlineKeyboardButton(
-            '👤 Особистий кабінет',
-            url='https://my.happylink.net.ua/'
-        )
     )
     return menu
 
@@ -259,7 +301,6 @@ def bill_handler(message: types.Message):
             )
 
             bill_records = cursor.fetchall()
-            print(bill_records)
             if bill_records:
                 headers = [ "Баланс", "Тариф", "Адреса"]
                 table = [
@@ -283,6 +324,7 @@ def bill_handler(message: types.Message):
                     parse_mode="HTML"
                 )
             else:
+                time.sleep(MESSAGE_DELAY_TIME)
                 bot.send_message(
                     user_id,
                     "<b>Не має активних послуг</b>. \n Будь ласка, зверніться до підтримки.",
@@ -356,10 +398,11 @@ def lc_handler(message: types.Message):
     user_id = message.chat.id
 
     time.sleep(MESSAGE_DELAY_TIME)
-    bot.send_photo(
+    bot.send_message(
         user_id,
-        'https://cdn.pixabay.com/photo/2024/06/03/12/29/online-8806305_960_720.jpg',
-        reply_markup=get_lc_menu()
+        'Натисніть на посилання, щоб відкрити:\n [👤 особистий кабінет](https://my.happylink.net.ua/)',
+        parse_mode="MarkdownV2"
+        
     )
     logging.info(f"Користувач {user_id} натиснув '👤 Кабінет'.")
 
@@ -370,12 +413,15 @@ def pay_handler(message: types.Message):
     user_id = message.chat.id
 
     time.sleep(MESSAGE_DELAY_TIME)
-    bot.send_photo(
+    bot.send_message(
         user_id,
-        'https://cdn.pixabay.com/photo/2024/06/03/12/29/online-8806305_960_720.jpg',
+        "*💰 Оберіть зручний спосіб оплати:*",
+        parse_mode="MarkdownV2",
         reply_markup=get_pay_menu()
     )
     logging.info(f"Користувач {user_id} натиснув 'Поповнити рахунок'.")
+
+
 
 @bot.callback_query_handler(func=lambda call: call.data == 'show_requisites_handler')
 def show_requisites_handler(call: types.CallbackQuery):
