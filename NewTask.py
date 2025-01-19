@@ -82,7 +82,7 @@ def get_latest_question(conn):
 
 def format_message(data):
     agreement_number = data[3]
-    agreement_link = f'https://service.happylink.net.ua/abonents/detail?agreement={agreement_number}'
+    agreement_link = f'https://localhost/abonents/detail?agreement={agreement_number}'
     formatted_number = re.sub(r'\D', '', data[5])[2:]
     
     def is_employee():
