@@ -7,8 +7,10 @@ from datetime import datetime
 import pymysql
 import requests
 from dotenv import load_dotenv
-from telebot import TeleBot, types
+from telebot import TeleBot, types, apihelper
 from tabulate import tabulate
+
+
 
 
 
@@ -125,10 +127,19 @@ def get_user_by_telegram_id(telegram_id: int):
 @bot.message_handler(content_types=['animation', 'audio', 'document', 'photo', 'sticker', 'video', 'video_note', 'voice', 'location', 'dice', 'poll'])
 def unsupported_message_handler(message: types.Message):
     user_id = message.chat.id
+    user_message_id = message.message_id
 
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     button_start = types.KeyboardButton("/start")
     markup.add(button_start)
+
+    try:
+        bot.delete_message(chat_id=user_id, message_id=user_message_id)
+        print(f"Сообщение {user_message_id} удалено.")
+        logging.info(f"Сообщение {user_message_id} удалено.")
+    except apihelper.ApiException as e:
+        print(f"Ошибка при удалении сообщения: {e}")
+        logging.info(f"Ошибка при удалении сообщения: {e}")
 
     # Отправляем сообщение пользователю
     bot.send_message(
@@ -247,6 +258,9 @@ def contact_handler(message: types.Message):
 
 
 
+
+
+
 @bot.message_handler(func=lambda msg: msg.text == "💳 Баланс")
 def bill_handler(message: types.Message):
     user_id = message.chat.id
@@ -255,59 +269,75 @@ def bill_handler(message: types.Message):
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-            '''
-            SELECT
-                c.agreement,
-                c.balance,
-                REPLACE(GROUP_CONCAT(DISTINCT bill_prices.name ORDER BY bill_prices.name SEPARATOR ', '), ' ', '\n') AS tariff,
-                 CONCAT(
-                    REPLACE(ac.name, ' ', '\n'), ', ',
-                    REPLACE(s.name, ' ', '\n'), ', ',
-                    REPLACE(ah.name, ' ', '\n'), ', кв. ',
-                    REPLACE(c.apartment, ' ', '\n')
-                ) AS address
-            FROM clients c
-            JOIN addr_houses ah ON ah.id = c.house
-            JOIN addr_streets s ON s.id = ah.street
-            JOIN addr_cities ac ON ac.id = s.city
-            JOIN client_prices ON client_prices.agreement = c.id AND client_prices.time_stop IS NULL
-            JOIN bill_prices ON bill_prices.id = client_prices.price
-            WHERE c.telegram_chat_id=%s
-            GROUP BY c.agreement, c.balance, address, c.telegram_chat_id
-            ORDER BY client_prices.id DESC
-            LIMIT 10;
-            ''',
-            (user_id,)
+                '''
+                SELECT
+                    c.agreement,
+                    c.balance,
+                    REPLACE(GROUP_CONCAT(DISTINCT bill_prices.name ORDER BY bill_prices.name SEPARATOR ', '), ' ', '\n') AS tariff,
+                    CONCAT(
+                        REPLACE(ac.name, ' ', '\n'), ', ',
+                        REPLACE(s.name, ' ', '\n'), ', ',
+                        REPLACE(ah.name, ' ', '\n'), ', кв. ',
+                        REPLACE(c.apartment, ' ', '\n')
+                    ) AS address
+                FROM clients c
+                JOIN addr_houses ah ON ah.id = c.house
+                JOIN addr_streets s ON s.id = ah.street
+                JOIN addr_cities ac ON ac.id = s.city
+                JOIN client_prices ON client_prices.agreement = c.id AND client_prices.time_stop IS NULL
+                JOIN bill_prices ON bill_prices.id = client_prices.price
+                WHERE c.telegram_chat_id=%s
+                GROUP BY c.agreement, c.balance, address, c.telegram_chat_id
+                ORDER BY client_prices.id DESC
+                LIMIT 10;
+                ''',
+                (user_id,)
             )
 
             bill_records = cursor.fetchall()
             if bill_records:
-                headers = [ "Баланс", "Тариф", "Адреса"]
-                table = [
-                    [
-                        f"₴{row[1]:.2f}",
-                        f"{row[2]}",
-                        f"{row[3]}",
-                    ]
-                    for row in bill_records
-                ]
+                headers = ["Договір #", "Баланс", "Тариф"]
+                table = []
+                addresses = []
 
-                table_text = tabulate(table, headers=headers, tablefmt="grid")
+                for row in bill_records:
+                    agreement = row[0]
+                    balance = row[1]
+                    balance_emoji = "✅" if balance >= 0 else "🔴"
+                    formatted_balance = f"{balance_emoji} {balance:.2f}₴"
 
-                # Получаем "Договір" и добавляем его в сообщение перед таблицей
-                agreement = bill_records[0][0]
+                    table.append([agreement, formatted_balance, row[2]])  # Добавили договор
+                    addresses.append(f"#{agreement}: {row[3]}")  # Сохраняем адрес отдельно
+
+                # Создаем таблицу
+                table_text = tabulate(
+                    table,
+                    headers=headers,
+                    tablefmt="grid",
+                    maxcolwidths=[8, 12, 15],  # Ограничиваем ширину столбцов
+                )
+
+                # Создаем список адресов
+                addresses_text = "\n".join(addresses)
+
+                # Формируем итоговое сообщение
+                message_text = (
+                    f"<b>Деталі договорів:</b>\n\n"
+                    f"<pre>{table_text}</pre>\n\n"
+                    f"<b>Опис:</b>\n{addresses_text}"
+                )
 
                 time.sleep(MESSAGE_DELAY_TIME)
                 bot.send_message(
                     user_id,
-                    text=f"Договір# {agreement}\n<pre>{table_text}</pre>",
+                    text=message_text,
                     parse_mode="HTML"
                 )
             else:
                 time.sleep(MESSAGE_DELAY_TIME)
                 bot.send_message(
                     user_id,
-                    "<b>Не має активних послуг</b>. \n Будь ласка, зверніться до підтримки.",
+                    "<b>Не має активних послуг</b>. \nБудь ласка, зверніться до підтримки.",
                     parse_mode="HTML"
                 )
     except pymysql.MySQLError as e:
@@ -317,7 +347,9 @@ def bill_handler(message: types.Message):
         connection.close()
 
 
-@bot.message_handler(func=lambda msg: msg.text == "💯 Платежі") 
+
+
+@bot.message_handler(func=lambda msg: msg.text == "💯 Платежі")
 def show_payment_handler(message: types.Message):
     user_id = message.chat.id
 
@@ -326,44 +358,65 @@ def show_payment_handler(message: types.Message):
         with connection.cursor() as cursor:
             cursor.execute(
                 '''
-                SELECT p.money,
+                SELECT 
+                       p.id,
+                       c.agreement,
+                       p.money,
                        CAST(time AS DATE) time,
-                       p.comment,
-                       p.payment_type,
-                       c.agreement
+                       p.payment_type
                 FROM paymants p
                 JOIN clients c ON p.agreement = c.id
                 WHERE c.telegram_chat_id=%s
                 ORDER BY time DESC
-                LIMIT 12;
+                LIMIT 24;
                 ''',
                 (user_id,)
             )
             payment_records = cursor.fetchall()
             if payment_records:
-                headers = ["Сума", "Дата", "Опис"]
-                table = [
-                    [
-                        f'\u20b4{row[0]}',
-                        row[1].strftime("%Y-%m-%d"),
-                        row[2] if row[2] else ''
-                    ]
-                    for row in payment_records
-                ]
-                # Получаем "Договір" и добавляем его в сообщение перед таблицей
-                agreement = payment_records[0][4]
-                table_text = tabulate(table, headers=headers, tablefmt="grid")
+                headers = ["id", "Договір", "Сума", "Дата"]
+                table = []
+                payments_type = []
+
+                for row in payment_records:
+                    id = row[0]
+                    agreement = row[1]
+                    formatted_money = f'{row[2]}₴'
+                    formatted_date = row[3].strftime("%Y-%m-%d")
+                    payment_type = row[4] if row[4] else "Немає опису"
+                    table.append([id, agreement, formatted_money, formatted_date])  # Добавили договор
+                    payments_type.append(f"id# {id}: {payment_type}")  # Сохраняем описание отдельно
+
+                # Создаем таблицу
+                table_text = tabulate(
+                    table,
+                    headers=headers,
+                    tablefmt="grid",
+                    maxcolwidths=[5, 5, 15, 15],  # Ограничиваем ширину столбцов
+                )
+
+                # Создаем список комментариев
+                comments_text = "\n".join(payments_type)
+
+                # Формируем итоговое сообщение
+                message_text = (
+                    f"<b>Останні платежі:</b>\n\n"
+                    f"<pre>{table_text}</pre>\n\n"
+                    f"<b>Опис:</b>\n{comments_text}"
+                )
 
                 time.sleep(MESSAGE_DELAY_TIME)
                 bot.send_message(
                     user_id,
-                    text=f"Договір# {agreement}\n останні 12 платежів \n<pre>{table_text}</pre>",
+                    text=message_text,
                     parse_mode="HTML"
                 )
             else:
+                time.sleep(MESSAGE_DELAY_TIME)
                 bot.send_message(
                     user_id,
-                    "Платежі не знайдено. Будь ласка, зверніться до підтримки."
+                    "Платежі не знайдено. Будь ласка, зверніться до підтримки.",
+                    parse_mode="HTML"
                 )
     except pymysql.MySQLError as e:
         logging.error(f"Помилка бази даних: {e}")
